@@ -1,0 +1,14 @@
+duckdb>=1.0.0
+py7zr>=0.20.0
+pyarrow>=15.0.0
+pandas>=2.0.0
+numpy>=1.24.0
+shapely>=2.0.0
+pyproj>=3.5.0
+fastapi>=0.100.0
+uvicorn>=0.20.0
+pydantic>=2.0.0
+gtfs-realtime-bindings>=1.0.0
+matplotlib>=3.7.0
+pytest>=7.0.0
+httpx>=0.24.0

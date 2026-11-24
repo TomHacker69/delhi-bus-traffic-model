@@ -1,0 +1,30 @@
+# Python build artifacts and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Large SQLite telematics databases (> 3 GB raw files)
+data/raw/
+*.db
+*.db-shm
+*.db-wal
+*.7z
+
+# Intermediate Parquet GPS Pings (reproducible via pipeline/clean_gps.py)
+data/parquet/clean_gps/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+
+# OS and IDE configuration
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
