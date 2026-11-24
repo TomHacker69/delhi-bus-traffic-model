@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-01",
+  "day_type": "weekday",
+  "valid_segments_saved": 2592,
+  "discard_too_few_pings": 629,
+  "discard_invalid_time": 2,
+  "discard_speed_high": 0,
+  "discard_speed_low": 1,
+  "discard_bad_length": 0,
+  "duration_sec": 5.19,
+  "file_size_mb": 0.15
+}

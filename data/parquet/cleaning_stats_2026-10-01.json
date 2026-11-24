@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-01",
+  "day_type": "weekday",
+  "is_holiday": false,
+  "raw_pings": 31290299,
+  "dropped_out_of_bounds": 30818502,
+  "dropped_overspeed": 396,
+  "dropped_far_from_shape": 32574,
+  "repaired_missing_trip_id": 0,
+  "clean_pings": 438827,
+  "duration_sec": 9.84,
+  "output_path": "data\\parquet\\clean_gps\\date=2026-10-01\\clean_pings.parquet",
+  "file_size_mb": 16.14
+}
