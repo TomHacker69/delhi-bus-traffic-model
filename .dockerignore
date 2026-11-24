@@ -1,0 +1,13 @@
+.git
+.github
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+data/raw/
+data/parquet/clean_gps/
+tests/
+.vscode/
+.idea/

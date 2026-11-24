@@ -149,6 +149,30 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000
 
 ---
 
+## Deployment & Cloud Execution
+
+### 1. GitHub Pages (Live Web Client)
+- **Live URL**: [https://tomhacker69.github.io/delhi-bus-traffic-model/](https://tomhacker69.github.io/delhi-bus-traffic-model/)
+- Automatically deployed on push to `main` via `.github/workflows/pages.yml`.
+
+### 2. Run with Docker / GitHub Container Registry (GHCR)
+The application is containerized and published to GHCR on every push:
+
+```bash
+# Pull and run the pre-built container
+docker run -d -p 8000:8000 --name delhi-transit ghcr.io/tomhacker69/delhi-bus-traffic-model:latest
+
+# Or build locally with docker-compose
+docker compose up -d
+```
+
+### 3. One-Click Cloud Deployment (Render / Railway)
+- **Render**: Connect the repository at `https://github.com/TomHacker69/delhi-bus-traffic-model`. The included `render.yaml` automatically sets up the Python service with dynamic `$PORT` binding.
+- **Railway**: Connect repository; uses `railway.toml` and `Dockerfile` automatically.
+- **Heroku / Fly.io**: Uses `Procfile` and `Dockerfile`.
+
+---
+
 ## Live vs Historical Modes
 
 The system automatically switches operational modes based on environment variables:

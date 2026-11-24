@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  delhi-transit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/tomhacker69/delhi-bus-traffic-model:latest
+    container_name: delhi-bus-traffic-model
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+    restart: unless-stopped

@@ -1060,7 +1060,12 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-    const API_BASE = window.location.origin.includes('8000') ? window.location.origin : 'http://localhost:8000';
+    let API_BASE = window.location.origin;
+    if (window.location.hostname.includes('github.io')) {
+      API_BASE = localStorage.getItem('DELHI_TRANSIT_API_URL') || 'https://delhi-bus-traffic-model.onrender.com';
+    } else if (!window.location.origin.includes('8000')) {
+      API_BASE = 'http://localhost:8000';
+    }
     let map;
     let originMarker = null;
     let destMarker = null;
