@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delhi Transit Flow • AI Bus Traffic Model & Journey Planner</title>
+  
+  <!-- Premium Fonts: Plus Jakarta Sans, Inter, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    :root {
+      --bg-dark: #080c14;
+      --surface-sidebar: rgba(13, 19, 33, 0.88);
+      --surface-card: rgba(22, 31, 50, 0.70);
+      --surface-card-hover: rgba(30, 43, 69, 0.85);
+      --surface-card-active: rgba(14, 165, 233, 0.08);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-focus: #0ea5e9;
+      --brand-primary: #0ea5e9;
+      --brand-gradient: linear-gradient(135deg, #0284c7 0%, #06b6d4 100%);
+      --accent-emerald: #10b981;
+      --accent-rose: #f43f5e;
+      --accent-amber: #f59e0b;
+      --accent-violet: #8b5cf6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-subtle: #64748b;
+      --font-heading: 'Plus Jakarta Sans', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-body);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Floating / Collapsible Sidebar */
+    #sidebar {
+      width: 460px;
+      height: 100%;
+      background: var(--surface-sidebar);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border-subtle);
+      z-index: 1000;
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 10px 0 40px rgba(0, 0, 0, 0.6);
+      position: relative;
+    }
+
+    #sidebar.collapsed {
+      transform: translateX(-100%);
+    }
+
+    /* Toggle button for sidebar */
+    .sidebar-toggle-btn {
+      position: absolute;
+      top: 20px;
+      right: -42px;
+      width: 36px;
+      height: 36px;
+      background: #0f172a;
+      border: 1px solid var(--border-subtle);
+      border-left: none;
+      border-radius: 0 10px 10px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-main);
+      cursor: pointer;
+      box-shadow: 4px 4px 16px rgba(0,0,0,0.5);
+      z-index: 1001;
+      transition: all 0.2s;
+    }
+    .sidebar-toggle-btn:hover {
+      background: #1e293b;
+      color: var(--brand-primary);
+    }
+
+    /* Header */
+    .brand-header {
+      padding: 22px 24px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.6) 0%, rgba(13, 19, 33, 0.3) 100%);
+    }
+    .brand-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand-logo-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon-wrap {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--brand-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(14, 165, 233, 0.4);
+    }
+    .brand-title {
+      font-family: var(--font-heading);
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      color: #ffffff;
+    }
+    .brand-subtitle {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(14, 165, 233, 0.12);
+      border: 1px solid rgba(14, 165, 233, 0.3);
+      color: #38bdf8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #38bdf8;
+      box-shadow: 0 0 8px #38bdf8;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    /* Form Container */
+    .planner-form-container {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: rgba(15, 23, 42, 0.4);
+    }
+
+    /* Corridor Presets */
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-subtle);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .presets-scroll {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      margin-bottom: 16px;
+      scrollbar-width: none;
+    }
+    .presets-scroll::-webkit-scrollbar { display: none; }
+    .preset-chip {
+      flex: 0 0 auto;
+      padding: 6px 12px;
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .preset-chip:hover {
+      background: rgba(51, 65, 85, 0.8);
+      border-color: rgba(14, 165, 233, 0.4);
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+
+    /* Location inputs with swap */
+    .od-inputs-group {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .swap-btn-container {
+      position: absolute;
+      right: 18px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 10;
+    }
+    .btn-swap-od {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--brand-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .btn-swap-od:hover {
+      background: var(--brand-primary);
+      color: #0f172a;
+      transform: rotate(180deg) scale(1.1);
+    }
+
+    .input-row {
+      position: relative;
+      display: flex;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 0 12px;
+      transition: all 0.2s;
+    }
+    .input-row:focus-within {
+      border-color: var(--brand-primary);
+      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+      background: rgba(15, 23, 42, 1);
+    }
+    .input-icon {
+      color: var(--text-subtle);
+      margin-right: 10px;
+      display: flex;
+      align-items: center;
+    }
+    .input-icon.origin { color: var(--accent-emerald); }
+    .input-icon.dest { color: var(--accent-rose); }
+    
+    .input-field {
+      flex: 1;
+      height: 42px;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 500;
+      padding-right: 32px;
+    }
+    .input-field::placeholder { color: var(--text-subtle); }
+
+    .input-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .action-icon-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-subtle);
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .action-icon-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .action-icon-btn.active {
+      color: var(--brand-primary);
+      background: rgba(14, 165, 233, 0.15);
+    }
+
+    /* Autocomplete list */
+    .autocomplete-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      max-height: 220px;
+      overflow-y: auto;
+      z-index: 2000;
+      display: none;
+      margin-top: 4px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.7);
+    }
+    .autocomplete-item {
+      padding: 10px 14px;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: background 0.15s;
+    }
+    .autocomplete-item:hover {
+      background: rgba(14, 165, 233, 0.12);
+    }
+    .ac-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+    .ac-sub {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      color: var(--text-subtle);
+    }
+
+    /* Departure & Time shortcuts */
+    .time-control-group {
+      margin-bottom: 16px;
+    }
+    .time-shortcuts {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .time-pill {
+      padding: 4px 9px;
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      font-size: 10.5px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .time-pill:hover, .time-pill.active {
+      background: rgba(14, 165, 233, 0.15);
+      border-color: var(--brand-primary);
+      color: #38bdf8;
+    }
+
+    .datetime-input-row {
+      display: flex;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 0 12px;
+    }
+    .datetime-input {
+      width: 100%;
+      height: 38px;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #f8fafc;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    /* Submit Button */
+    .btn-find-journeys {
+      width: 100%;
+      height: 44px;
+      background: var(--brand-gradient);
+      border: none;
+      border-radius: 10px;
+      color: #ffffff;
+      font-family: var(--font-heading);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 16px rgba(14, 165, 233, 0.35);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .btn-find-journeys:hover {
+      box-shadow: 0 6px 22px rgba(14, 165, 233, 0.5);
+      transform: translateY(-1px);
+    }
+    .btn-find-journeys:active {
+      transform: translateY(1px);
+    }
+
+    /* Results section */
+    .results-scroll-pane {
+      flex: 1;
+      padding: 20px 24px;
+      overflow-y: auto;
+    }
+    .results-scroll-pane::-webkit-scrollbar {
+      width: 6px;
+    }
+    .results-scroll-pane::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+
+    .results-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .results-heading {
+      font-family: var(--font-heading);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+
+    /* Journey Option Card - Executive Transit UI */
+    .journey-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      cursor: pointer;
+      transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+    .journey-card:hover {
+      background: var(--surface-card-hover);
+      border-color: rgba(14, 165, 233, 0.4);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    }
+    .journey-card.active {
+      background: rgba(15, 23, 42, 0.95);
+      border-color: #0ea5e9;
+      box-shadow: 0 12px 35px rgba(14, 165, 233, 0.25);
+    }
+    .journey-card.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--brand-gradient);
+    }
+
+    .card-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .card-label-badge {
+      font-family: var(--font-heading);
+      font-size: 11px;
+      font-weight: 700;
+      color: #38bdf8;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .card-conf-badge {
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-family: var(--font-body);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .conf-high {
+      background: rgba(16, 185, 129, 0.12);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .conf-med {
+      background: rgba(245, 158, 11, 0.12);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .conf-base {
+      background: rgba(99, 102, 241, 0.12);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.28);
+    }
+
+    .card-duration-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .duration-block {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+    .duration-number {
+      font-family: var(--font-heading);
+      font-size: 32px;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -0.5px;
+      line-height: 1;
+    }
+    .duration-unit {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .arrival-badge-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      color: #cbd5e1;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 5px 10px;
+      border-radius: 8px;
+    }
+
+    /* Executive Traffic Impact Gauge */
+    .traffic-impact-card {
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.45) 0%, rgba(15, 23, 42, 0.5) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+    }
+    .impact-top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 11.5px;
+    }
+    .impact-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+    .impact-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+    .dot-peak { background: var(--accent-rose); box-shadow: 0 0 8px rgba(244, 63, 94, 0.7); }
+    .dot-mod { background: var(--accent-amber); box-shadow: 0 0 8px rgba(245, 158, 11, 0.7); }
+    .dot-flow { background: var(--accent-emerald); box-shadow: 0 0 8px rgba(16, 185, 129, 0.7); }
+
+    .impact-delay-chip {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-rose);
+      background: rgba(244, 63, 94, 0.12);
+      border: 1px solid rgba(244, 63, 94, 0.25);
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+    .impact-delay-chip.smooth {
+      color: var(--accent-emerald);
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.25);
+    }
+
+    .congestion-gauge-track {
+      height: 5px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .congestion-gauge-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981 0%, #f59e0b 50%, #f43f5e 100%);
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+
+    .impact-stats-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .impact-stats-row b {
+      color: #e2e8f0;
+      font-family: var(--font-mono);
+    }
+
+    /* Modern Station & Transit Leg Itinerary */
+    .transit-journey-timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 4px;
+    }
+
+    .timeline-node {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      position: relative;
+    }
+
+    .node-track-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 16px;
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+
+    .station-node-ring {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #0f172a;
+      border: 3px solid var(--accent-emerald);
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+      z-index: 2;
+    }
+    .station-node-ring.dest {
+      border-color: var(--accent-rose);
+      box-shadow: 0 0 10px rgba(244, 63, 94, 0.4);
+    }
+
+    .node-stem-line {
+      width: 2px;
+      flex-grow: 1;
+      min-height: 24px;
+      background: rgba(255, 255, 255, 0.12);
+      margin: 4px 0;
+    }
+    .node-stem-line.dashed {
+      background: transparent;
+      border-left: 2px dashed rgba(255, 255, 255, 0.18);
+      width: 0;
+    }
+
+    .node-text-col {
+      flex: 1;
+    }
+    .station-title-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    .station-name-text {
+      font-family: var(--font-heading);
+      font-size: 13px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .station-time-text {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .station-sub-text {
+      font-size: 11px;
+      color: var(--text-subtle);
+      margin-top: 2px;
+    }
+
+    /* Bus Corridor Card */
+    .corridor-transit-card {
+      background: rgba(14, 165, 233, 0.06);
+      border: 1px solid rgba(14, 165, 233, 0.18);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin: 2px 0;
+    }
+    .corridor-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .corridor-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--brand-gradient);
+      color: #ffffff;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-family: var(--font-heading);
+      font-size: 11.5px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      box-shadow: 0 2px 8px rgba(14, 165, 233, 0.35);
+    }
+    .corridor-duration-meta {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: #e0f2fe;
+    }
+    .corridor-stats-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .btn-expand-stops {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      padding: 4px 9px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #38bdf8;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-expand-stops:hover {
+      background: rgba(14, 165, 233, 0.15);
+      border-color: #38bdf8;
+    }
+    .btn-expand-stops svg {
+      transition: transform 0.2s;
+    }
+    .btn-expand-stops.open svg {
+      transform: rotate(180deg);
+    }
+
+    .stops-drawer-list {
+      display: none;
+      margin-top: 10px;
+      padding-left: 6px;
+      border-left: 2px solid rgba(14, 165, 233, 0.3);
+      max-height: 160px;
+      overflow-y: auto;
+    }
+    .stop-drawer-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: #cbd5e1;
+      padding: 3px 0;
+    }
+    .stop-drawer-num {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #1e293b;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+    }
+
+    /* Card Footer Bar */
+    .card-footer-action-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .footer-pill-tag {
+      font-size: 10.5px;
+      font-family: var(--font-mono);
+      color: var(--text-subtle);
+    }
+    .btn-card-map-action {
+      background: transparent;
+      border: none;
+      color: #38bdf8;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: color 0.15s;
+    }
+    .btn-card-map-action:hover {
+      color: #7dd3fc;
+      text-decoration: underline;
+    }
+
+    /* Map container */
+    #map-viewport {
+      flex: 1;
+      height: 100%;
+      background: #090e17;
+      position: relative;
+    }
+
+    /* Map Theme Filter (Obsidian Dark Transit Look) */
+    .leaflet-tile-pane.dark-obsidian {
+      filter: brightness(0.65) invert(1) contrast(2.8) hue-rotate(205deg) saturate(0.35);
+    }
+
+    /* Map controls overlay */
+    .map-floating-controls {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 999;
+      display: flex;
+      gap: 8px;
+    }
+    .map-btn {
+      padding: 8px 14px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+      transition: all 0.2s;
+    }
+    .map-btn:hover {
+      background: #1e293b;
+      border-color: rgba(14, 165, 233, 0.4);
+    }
+    .map-btn.active {
+      background: var(--brand-primary);
+      color: #0f172a;
+    }
+
+    /* Custom Leaflet Popups */
+    .leaflet-popup-content-wrapper {
+      background: #0f172a !important;
+      color: #ffffff !important;
+      border: 1px solid rgba(255, 255, 255, 0.12) !important;
+      border-radius: 10px !important;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6) !important;
+      padding: 4px;
+    }
+    .leaflet-popup-tip {
+      background: #0f172a !important;
+    }
+    .stop-popup-title {
+      font-family: var(--font-heading);
+      font-size: 13px;
+      font-weight: 700;
+      color: #38bdf8;
+      margin-bottom: 4px;
+    }
+    .stop-popup-info {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Left Interactive Control Sidebar -->
+  <div id="sidebar">
+    <button class="sidebar-toggle-btn" id="sidebarToggle" onclick="toggleSidebar()" title="Toggle Sidebar">
+      <svg id="toggleIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    </button>
+
+    <!-- Brand Header -->
+    <div class="brand-header">
+      <div class="brand-top">
+        <div class="brand-logo-title">
+          <div class="brand-icon-wrap">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 17V7"/><path d="M15 17V7"/></svg>
+          </div>
+          <div>
+            <div class="brand-title">Delhi Transit Flow</div>
+            <div class="brand-subtitle">Time-Dependent Bus Traffic Model • DTS</div>
+          </div>
+        </div>
+        <div class="status-pill" id="statusPill">
+          <div class="status-dot"></div>
+          <span id="dataModeText">Historical</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inputs & Playground -->
+    <div class="planner-form-container">
+      
+      <!-- Key Corridor Presets -->
+      <div class="section-label">
+        <span>Popular Corridors</span>
+        <span style="font-size: 9.5px; color:#38bdf8; cursor:pointer;" onclick="setPreset('ISBT Kashmere Gate', 'Nehru Place Terminal')">Reset</span>
+      </div>
+      <div class="presets-scroll">
+        <button class="preset-chip" onclick="setPreset('ISBT Kashmere Gate', 'Nehru Place Terminal')">
+          <span>📍</span> <b>429 Corridor:</b> Kashmere Gate → Nehru Place
+        </button>
+        <button class="preset-chip" onclick="setPreset('Air Force HQ / Subroto Park', 'Dhaula Kuan')">
+          <span>✈️</span> Airport Ring Rd → Dhaula Kuan
+        </button>
+        <button class="preset-chip" onclick="setPreset('Anand Vihar ISBT', 'Delhi Gate')">
+          <span>🏛️</span> Anand Vihar ISBT → Delhi Gate
+        </button>
+        <button class="preset-chip" onclick="setPreset('AIIMS', 'ISBT Kashmere Gate')">
+          <span>🏥</span> AIIMS → Kashmere Gate
+        </button>
+      </div>
+
+      <!-- Origin & Destination with Swap -->
+      <div class="od-inputs-group">
+        <div class="swap-btn-container">
+          <button class="btn-swap-od" onclick="swapLocations()" title="Swap Origin and Destination">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/></svg>
+          </button>
+        </div>
+
+        <!-- Origin -->
+        <div class="input-row" id="rowOrigin">
+          <span class="input-icon origin">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>
+          </span>
+          <input type="text" class="input-field" id="originInput" placeholder="Origin stop name or coordinates..." autocomplete="off">
+          <div class="input-actions">
+            <button class="action-icon-btn" id="btnPinOrigin" onclick="toggleMapPick('origin')" title="Click on map to select origin">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            </button>
+          </div>
+          <div class="autocomplete-dropdown" id="originList"></div>
+        </div>
+
+        <!-- Destination -->
+        <div class="input-row" id="rowDest">
+          <span class="input-icon dest">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </span>
+          <input type="text" class="input-field" id="destInput" placeholder="Destination stop name or coordinates..." autocomplete="off">
+          <div class="input-actions">
+            <button class="action-icon-btn" id="btnPinDest" onclick="toggleMapPick('dest')" title="Click on map to select destination">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            </button>
+          </div>
+          <div class="autocomplete-dropdown" id="destList"></div>
+        </div>
+      </div>
+
+      <!-- Departure Time & Congestion Dial -->
+      <div class="time-control-group">
+        <div class="section-label">
+          <span>Departure Traffic Window</span>
+          <span id="trafficSpeedLabel" style="color:#f59e0b; font-size:10px;">Oct 2026 Telematics</span>
+        </div>
+        <div class="time-shortcuts">
+          <button class="time-pill active" onclick="setTimePreset('08:30')">🌅 Morning Peak (8:30 AM)</button>
+          <button class="time-pill" onclick="setTimePreset('14:00')">☀️ Midday (2:00 PM)</button>
+          <button class="time-pill" onclick="setTimePreset('18:30')">🌆 Evening Peak (6:30 PM)</button>
+          <button class="time-pill" onclick="setTimePreset('23:00')">🌙 Quiet Night (11:00 PM)</button>
+        </div>
+        <div class="datetime-input-row">
+          <input type="datetime-local" class="datetime-input" id="departInput">
+        </div>
+      </div>
+
+      <!-- Submit button -->
+      <button class="btn-find-journeys" id="btnSubmit" onclick="planJourney()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span>Plan Traffic-Aware Journey</span>
+      </button>
+
+    </div>
+
+    <!-- Results Panel -->
+    <div class="results-scroll-pane" id="resultsContainer">
+      <div class="results-header-row">
+        <div class="results-heading">Journey Options</div>
+        <div id="resultsCount" style="font-size:11px; color:#64748b;"></div>
+      </div>
+      <div id="resultsList">
+        <div style="text-align: center; padding: 40px 10px; color: var(--text-subtle);">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:12px; opacity:0.6;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <p style="font-size: 13px; font-weight: 500;">Select origin, destination, and departure time to view live traffic predictions.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Fullscreen Leaflet Map Viewport -->
+  <div id="map-viewport">
+    <div class="map-floating-controls">
+      <button class="map-btn active" id="btnThemeToggle" onclick="toggleMapTheme()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <span>Obsidian Theme</span>
+      </button>
+      <button class="map-btn" onclick="fitDelhiExtent()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0z"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <span>Reset Map</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    const API_BASE = window.location.origin.includes('8000') ? window.location.origin : 'http://localhost:8000';
+    let map;
+    let originMarker = null;
+    let destMarker = null;
+    let stopMarkers = [];
+    let routeLayers = [];
+    let mapPickMode = null; // 'origin' | 'dest'
+    let currentOptions = [];
+    let isDarkTheme = true;
+    let isSidebarCollapsed = false;
+
+    // Initialize Leaflet Map
+    function initMap() {
+      map = L.map('map-viewport', { zoomControl: false }).setView([28.6139, 77.2090], 12);
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      // OpenStreetMap Layer
+      const tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      // Apply Obsidian theme by default
+      const pane = map.getPane('tilePane');
+      if (pane) pane.classList.add('dark-obsidian');
+
+      map.on('click', onMapClick);
+    }
+
+    function toggleMapTheme() {
+      isDarkTheme = !isDarkTheme;
+      const pane = map.getPane('tilePane');
+      const btn = document.getElementById('btnThemeToggle');
+      if (isDarkTheme) {
+        pane.classList.add('dark-obsidian');
+        btn.classList.add('active');
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg><span>Obsidian Theme</span>`;
+      } else {
+        pane.classList.remove('dark-obsidian');
+        btn.classList.remove('active');
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg><span>Daylight Theme</span>`;
+      }
+    }
+
+    function toggleSidebar() {
+      isSidebarCollapsed = !isSidebarCollapsed;
+      const sb = document.getElementById('sidebar');
+      const icon = document.getElementById('toggleIcon');
+      if (isSidebarCollapsed) {
+        sb.classList.add('collapsed');
+        icon.innerHTML = '<polyline points="9 18 15 12 9 6"></polyline>';
+      } else {
+        sb.classList.remove('collapsed');
+        icon.innerHTML = '<polyline points="15 18 9 12 15 6"></polyline>';
+      }
+      setTimeout(() => map.invalidateSize(), 360);
+    }
+
+    function fitDelhiExtent() {
+      map.setView([28.6139, 77.2090], 12);
+    }
+
+    // Map Click Picker
+    function onMapClick(e) {
+      const lat = e.latlng.lat.toFixed(5);
+      const lon = e.latlng.lng.toFixed(5);
+
+      if (mapPickMode === 'origin') {
+        document.getElementById('originInput').value = `${lat}, ${lon}`;
+        setOriginMarker(e.latlng.lat, e.latlng.lng, 'Selected Pin Origin');
+        toggleMapPick(null);
+      } else if (mapPickMode === 'dest') {
+        document.getElementById('destInput').value = `${lat}, ${lon}`;
+        setDestMarker(e.latlng.lat, e.latlng.lng, 'Selected Pin Destination');
+        toggleMapPick(null);
+      }
+    }
+
+    function toggleMapPick(mode) {
+      const btnO = document.getElementById('btnPinOrigin');
+      const btnD = document.getElementById('btnPinDest');
+      if (mapPickMode === mode || !mode) {
+        mapPickMode = null;
+        btnO.classList.remove('active');
+        btnD.classList.remove('active');
+      } else {
+        mapPickMode = mode;
+        btnO.classList.toggle('active', mode === 'origin');
+        btnD.classList.toggle('active', mode === 'dest');
+      }
+    }
+
+    function setOriginMarker(lat, lon, label) {
+      if (originMarker) map.removeLayer(originMarker);
+      originMarker = L.circleMarker([lat, lon], {
+        radius: 9, fillColor: '#10b981', color: '#ffffff', weight: 2.5, fillOpacity: 0.95
+      }).addTo(map).bindPopup(`<div class="stop-popup-title">Origin</div><div class="stop-popup-info">${label}</div>`);
+    }
+
+    function setDestMarker(lat, lon, label) {
+      if (destMarker) map.removeLayer(destMarker);
+      destMarker = L.circleMarker([lat, lon], {
+        radius: 9, fillColor: '#f43f5e', color: '#ffffff', weight: 2.5, fillOpacity: 0.95
+      }).addTo(map).bindPopup(`<div class="stop-popup-title">Destination</div><div class="stop-popup-info">${label}</div>`);
+    }
+
+    // Swap Locations (Origin <-> Destination)
+    function swapLocations() {
+      const oInput = document.getElementById('originInput');
+      const dInput = document.getElementById('destInput');
+      const tempVal = oInput.value;
+      oInput.value = dInput.value;
+      dInput.value = tempVal;
+
+      if (originMarker && destMarker) {
+        const oLatLng = originMarker.getLatLng();
+        const dLatLng = destMarker.getLatLng();
+        setOriginMarker(dLatLng.lat, dLatLng.lng, oInput.value);
+        setDestMarker(oLatLng.lat, oLatLng.lng, dInput.value);
+      }
+      if (oInput.value && dInput.value) {
+        planJourney();
+      }
+    }
+
+    // Presets
+    function setPreset(from, to) {
+      document.getElementById('originInput').value = from;
+      document.getElementById('destInput').value = to;
+      planJourney();
+    }
+
+    // Departure Time helpers
+    function setTimePreset(timeStr) {
+      document.querySelectorAll('.time-pill').forEach(p => p.classList.remove('active'));
+      event.target.classList.add('active');
+
+      const d = new Date();
+      const [h, m] = timeStr.split(':').map(Number);
+      d.setHours(h, m, 0, 0);
+      const isoStr = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      document.getElementById('departInput').value = isoStr;
+      
+      const o = document.getElementById('originInput').value;
+      const dest = document.getElementById('destInput').value;
+      if (o && dest) planJourney();
+    }
+
+    function initDefaultTime() {
+      const d = new Date();
+      d.setHours(8, 30, 0, 0);
+      const isoStr = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      document.getElementById('departInput').value = isoStr;
+    }
+
+    // Autocomplete
+    function setupAutocomplete(inputId, listId) {
+      const input = document.getElementById(inputId);
+      const list = document.getElementById(listId);
+      let debounceTimer = null;
+
+      input.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        const query = input.value.trim();
+        if (query.length < 2) { list.style.display = 'none'; return; }
+
+        debounceTimer = setTimeout(async () => {
+          try {
+            const res = await fetch(`${API_BASE}/stops?q=${encodeURIComponent(query)}&limit=6`);
+            const items = await res.json();
+            if (items.length === 0) { list.style.display = 'none'; return; }
+
+            list.innerHTML = items.map(it => `
+              <div class="autocomplete-item" onclick="selectStop('${inputId}', '${listId}', '${it.stop_name.replace(/'/g, "\\'")}', ${it.lat}, ${it.lon})">
+                <span class="ac-name">${it.stop_name}</span>
+                <span class="ac-sub">#${it.stop_id}</span>
+              </div>
+            `).join('');
+            list.style.display = 'block';
+          } catch(e) { console.error(e); }
+        }, 180);
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !list.contains(e.target)) {
+          list.style.display = 'none';
+        }
+      });
+    }
+
+    function selectStop(inputId, listId, name, lat, lon) {
+      document.getElementById(inputId).value = name;
+      document.getElementById(listId).style.display = 'none';
+      if (inputId === 'originInput') setOriginMarker(lat, lon, name);
+      else setDestMarker(lat, lon, name);
+    }
+
+    // Health check
+    async function checkHealth() {
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        const data = await res.json();
+        const modeText = document.getElementById('dataModeText');
+        if (data.data_mode === 'live+historical') {
+          modeText.textContent = 'Live + Hist Model';
+          document.getElementById('statusPill').style.borderColor = 'rgba(16, 185, 129, 0.4)';
+          document.getElementById('statusPill').style.color = '#34d399';
+        } else {
+          modeText.textContent = 'Historical Model';
+        }
+      } catch(e) { console.warn(e); }
+    }
+
+    // Toggle leg stop list
+    function toggleLegStops(btn, sublistId) {
+      const el = document.getElementById(sublistId);
+      if (!el) return;
+      if (el.style.display === 'block') {
+        el.style.display = 'none';
+        btn.classList.remove('open');
+      } else {
+        el.style.display = 'block';
+        btn.classList.add('open');
+      }
+    }
+
+    // Zoom directly to option
+    function zoomToRoute(optIdx) {
+      renderOptionOnMap(optIdx);
+    }
+
+    // Render Journey Option Cards
+    function renderResults(data) {
+      const container = document.getElementById('resultsList');
+      if (data.options.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:30px 10px;">No transit itineraries available for this pair.</div>';
+        return;
+      }
+
+      setOriginMarker(data.origin.lat, data.origin.lon, data.origin.name);
+      setDestMarker(data.destination.lat, data.destination.lon, data.destination.name);
+
+      container.innerHTML = data.options.map((opt, idx) => {
+        let confClass = 'conf-high';
+        let confLabel = 'Observed Telematics';
+        if (opt.confidence === 'HIGH') {
+          confClass = 'conf-high';
+          confLabel = 'Observed GPS Data';
+        } else if (opt.confidence === 'MEDIUM' || opt.confidence === 'MEDIUM_HIGH') {
+          confClass = 'conf-med';
+          confLabel = 'Hourly Segment Model';
+        } else {
+          confClass = 'conf-base';
+          confLabel = 'Scheduled GTFS Baseline';
+        }
+
+        const arrTime = opt.estimated_arrival ? opt.estimated_arrival.split('T')[1].slice(0, 5) : '';
+        const depTime = opt.departure_time ? opt.departure_time.split('T')[1].slice(0, 5) : '';
+        const delay = Math.round(opt.congestion_delay_min);
+        const quiet = Math.round(opt.typical_quiet_hour_duration_min);
+        const total = Math.round(opt.total_duration_min);
+
+        const isHeavy = delay >= 15;
+        const isMod = delay >= 5 && delay < 15;
+        const dotClass = isHeavy ? 'dot-peak' : (isMod ? 'dot-mod' : 'dot-flow');
+        const delayChipClass = delay > 0 ? '' : 'smooth';
+        const impactRatio = quiet > 0 ? (total / quiet).toFixed(1) : '1.0';
+        const congestionWidth = quiet > 0 ? Math.min(100, Math.max(18, (delay / quiet) * 100)) : 15;
+
+        // Filter out zero-meter walk steps (< 25m)
+        const meaningfulLegs = opt.legs.filter(l => !(l.type === 'WALK' && (!l.distance_m || l.distance_m < 25)));
+
+        return `
+          <div class="journey-card ${idx === 0 ? 'active' : ''}" onclick="renderOptionOnMap(${idx})">
+            
+            <div class="card-top-row">
+              <span class="card-label-badge">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                ${opt.label}
+              </span>
+              <span class="card-conf-badge ${confClass}">${confLabel}</span>
+            </div>
+
+            <div class="card-duration-row">
+              <div class="duration-block">
+                <span class="duration-number">${total}</span>
+                <span class="duration-unit">min</span>
+              </div>
+              <div class="arrival-badge-wrap">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>${depTime} → ${arrTime}</span>
+              </div>
+            </div>
+
+            <!-- Executive Traffic Congestion Meter -->
+            <div class="traffic-impact-card">
+              <div class="impact-top-bar">
+                <div class="impact-badge">
+                  <span class="impact-dot ${dotClass}"></span>
+                  <span>${isHeavy ? 'Morning Peak Congestion' : (isMod ? 'Moderate Traffic' : 'Free Flow Conditions')}</span>
+                </div>
+                <div class="impact-delay-chip ${delayChipClass}">
+                  ${delay > 0 ? `+${delay}m peak delay` : 'Zero congestion'}
+                </div>
+              </div>
+              <div class="congestion-gauge-track">
+                <div class="congestion-gauge-bar" style="width: ${congestionWidth}%;"></div>
+              </div>
+              <div class="impact-stats-row">
+                <span>Quiet Hour Speed (11 PM): <b>${quiet} min</b></span>
+                <span>Congestion Index: <b>${impactRatio}x</b></span>
+              </div>
+            </div>
+
+            <!-- Transit Station & Route Itinerary -->
+            <div class="transit-journey-timeline">
+              ${meaningfulLegs.map((leg, lIdx) => {
+                if (leg.type === 'WALK') {
+                  return `
+                    <div class="timeline-node">
+                      <div class="node-track-col">
+                        <div class="station-node-ring" style="border-color:#64748b; width:10px; height:10px;"></div>
+                        <div class="node-stem-line dashed"></div>
+                      </div>
+                      <div class="node-text-col">
+                        <div class="station-title-row">
+                          <span class="station-name-text" style="font-size:12px; color:#cbd5e1;">Walk ${Math.round(leg.distance_m)}m</span>
+                          <span class="station-time-text">~${Math.round(leg.duration_min)} min</span>
+                        </div>
+                        <div class="station-sub-text">${leg.from_name} → ${leg.to_name}</div>
+                      </div>
+                    </div>
+                  `;
+                } else if (leg.type === 'BUS') {
+                  const sublistId = `stops_sublist_${idx}_${lIdx}`;
+                  const cleanRoute = String(leg.route_short_name || leg.route_id || '').replace(/\.0$/, '');
+                  const stopsCount = leg.stops_count || (leg.stops ? leg.stops.length : 0);
+                  const legDep = leg.departure_time ? leg.departure_time.split('T')[1].slice(0, 5) : depTime;
+                  const legArr = leg.arrival_time ? leg.arrival_time.split('T')[1].slice(0, 5) : arrTime;
+                  const distKm = leg.distance_m ? (leg.distance_m / 1000).toFixed(1) + ' km' : '14.4 km';
+
+                  const stopsHtml = leg.stops && leg.stops.length > 0
+                    ? leg.stops.map((s, sIdx) => `
+                      <div class="stop-drawer-item">
+                        <span class="stop-drawer-num">${sIdx + 1}</span>
+                        <span>${s.stop_name}</span>
+                      </div>
+                    `).join('')
+                    : '';
+
+                  return `
+                    <!-- Boarding Station -->
+                    <div class="timeline-node">
+                      <div class="node-track-col">
+                        <div class="station-node-ring"></div>
+                        <div class="node-stem-line"></div>
+                      </div>
+                      <div class="node-text-col">
+                        <div class="station-title-row">
+                          <span class="station-name-text">${leg.from_stop_name}</span>
+                          <span class="station-time-text">${legDep}</span>
+                        </div>
+                        <div class="station-sub-text">Board bus at stop platform</div>
+                      </div>
+                    </div>
+
+                    <!-- Bus Corridor Ride -->
+                    <div class="timeline-node">
+                      <div class="node-track-col">
+                        <div style="font-size:13px; line-height:1; margin:2px 0;">🚌</div>
+                        <div class="node-stem-line"></div>
+                      </div>
+                      <div class="node-text-col">
+                        <div class="corridor-transit-card">
+                          <div class="corridor-header-row">
+                            <span class="corridor-pill">DTC ${cleanRoute}</span>
+                            <span class="corridor-duration-meta">${Math.round(leg.duration_min)} min in traffic</span>
+                          </div>
+                          <div class="corridor-stats-row">
+                            <span>${distKm}</span>
+                            <span>•</span>
+                            <span>${stopsCount} intermediate stops</span>
+                          </div>
+                          ${stopsHtml ? `
+                            <button class="btn-expand-stops" onclick="event.stopPropagation(); toggleLegStops(this, '${sublistId}')">
+                              <span>Show ${stopsCount} Intermediate Stops</span>
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                            <div class="stops-drawer-list" id="${sublistId}">
+                              ${stopsHtml}
+                            </div>
+                          ` : ''}
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Alighting Station -->
+                    <div class="timeline-node">
+                      <div class="node-track-col">
+                        <div class="station-node-ring dest"></div>
+                      </div>
+                      <div class="node-text-col">
+                        <div class="station-title-row">
+                          <span class="station-name-text">${leg.to_stop_name}</span>
+                          <span class="station-time-text">${legArr}</span>
+                        </div>
+                        <div class="station-sub-text">Arrive at destination terminal</div>
+                      </div>
+                    </div>
+                  `;
+                } else if (leg.type === 'TRANSFER') {
+                  return `
+                    <div class="timeline-node">
+                      <div class="node-track-col">
+                        <div style="font-size:12px; color:var(--accent-amber); line-height:1;">⇄</div>
+                        <div class="node-stem-line"></div>
+                      </div>
+                      <div class="node-text-col">
+                        <div style="background:rgba(245, 158, 11, 0.08); border:1px solid rgba(245, 158, 11, 0.2); border-radius:8px; padding:8px 12px;">
+                          <div style="font-size:11.5px; font-weight:600; color:#fbbf24;">Transfer at ${leg.stop_name}</div>
+                          <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Expected connection wait: ~${Math.round(leg.wait_duration_min)} min</div>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }
+                return '';
+              }).join('')}
+            </div>
+
+            <!-- Card Bottom Bar -->
+            <div class="card-footer-action-row">
+              <span class="footer-pill-tag">DTC 429 • Metric Projected</span>
+              <button class="btn-card-map-action" onclick="event.stopPropagation(); zoomToRoute(${idx})">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>Highlight on Map</span>
+              </button>
+            </div>
+
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Render Routes & Stops onto Leaflet Map
+    function renderOptionOnMap(optIdx) {
+      // Clear previous layers
+      routeLayers.forEach(l => map.removeLayer(l));
+      routeLayers = [];
+      stopMarkers.forEach(m => map.removeLayer(m));
+      stopMarkers = [];
+
+      document.querySelectorAll('.journey-card').forEach((c, i) => {
+        c.classList.toggle('active', i === optIdx);
+      });
+
+      const opt = currentOptions[optIdx];
+      if (!opt) return;
+
+      const bounds = L.latLngBounds();
+      if (originMarker) bounds.extend(originMarker.getLatLng());
+      if (destMarker) bounds.extend(destMarker.getLatLng());
+
+      opt.legs.forEach(leg => {
+        if (leg.type === 'WALK' && leg.polyline && leg.polyline.length >= 2) {
+          const latlngs = leg.polyline.map(p => [p[0], p[1]]);
+          const walkLine = L.polyline(latlngs, {
+            color: '#10b981', weight: 4.5, dashArray: '5, 8', opacity: 0.85
+          }).addTo(map);
+          routeLayers.push(walkLine);
+          latlngs.forEach(ll => bounds.extend(ll));
+        } else if (leg.type === 'BUS') {
+          const cleanRoute = String(leg.route_short_name || leg.route_id || '').replace(/\.0$/, '');
+          // Bus polyline through all intermediate stops
+          if (leg.polyline && leg.polyline.length >= 2) {
+            const latlngs = leg.polyline.map(p => [p[0], p[1]]);
+            const busLine = L.polyline(latlngs, {
+              color: '#0ea5e9', weight: 6, opacity: 0.95
+            }).addTo(map).bindPopup(`<div class="stop-popup-title">DTC Bus ${cleanRoute}</div><div class="stop-popup-info">${leg.from_stop_name} → ${leg.to_stop_name} (${leg.stops_count} stops, ${Math.round(leg.duration_min)} min)</div>`);
+            routeLayers.push(busLine);
+            latlngs.forEach(ll => bounds.extend(ll));
+
+            // Place circular node markers for intermediate stops
+            if (leg.stops) {
+              leg.stops.forEach((st, sIdx) => {
+                if (sIdx > 0 && sIdx < leg.stops.length - 1) {
+                  const sm = L.circleMarker([st.lat, st.lon], {
+                    radius: 4.5, fillColor: '#38bdf8', color: '#0f172a', weight: 1.5, fillOpacity: 0.9
+                  }).addTo(map).bindPopup(`<div class="stop-popup-title">${st.stop_name}</div><div class="stop-popup-info">DTC ${cleanRoute} • Stop #${st.stop_id}</div>`);
+                  stopMarkers.push(sm);
+                }
+              });
+            }
+          }
+        }
+      });
+
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 });
+      }
+    }
+
+    // Window Init
+    window.onload = () => {
+      initMap();
+      initDefaultTime();
+      setupAutocomplete('originInput', 'originList');
+      setupAutocomplete('destInput', 'destList');
+      checkHealth();
+
+      // Automatically execute preset for initial view
+      setPreset('ISBT Kashmere Gate', 'Nehru Place Terminal');
+    };
+  </script>
+</body>
+</html>
